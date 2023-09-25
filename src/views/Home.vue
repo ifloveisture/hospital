@@ -80,11 +80,12 @@ h1 {
   background-color: #F0F3F4;
   color: #333;
   padding: 18px;
-  // overflow: hidden;
 }
 
 .el-card {
+  min-width: 960px;
   height: 100%;
   overflow: auto;
+  box-sizing: border-box;
 }
 </style>

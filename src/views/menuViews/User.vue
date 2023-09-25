@@ -2,40 +2,14 @@
   <div id="user">
     <div class="list-head">
       <el-input v-model="input" placeholder="用户名"></el-input>
-      <el-button style="margin-left: 10px;">查询</el-button>
+      <el-button style="margin-left: 10px;" @click="handleSearch">查询</el-button>
       <el-button type="primary" @click="handleAddItem">新增</el-button>
-      <el-dialog title="收货地址" :visible.sync="added">
-        <el-form ref="addItemForm" label-position="right" label-width="80px" :rules="addItemFromRules"
-          :model="addItemForm">
-          <el-form-item label="用户名" prop="username">
-            <el-input v-model="addItemForm.username" placeholder="登录账号"></el-input>
-          </el-form-item>
-          <el-form-item label="邮箱" prop="email">
-            <el-input v-model="addItemForm.email" placeholder="邮箱"></el-input>
-          </el-form-item>
-          <el-form-item label="手机号" prop="mobile">
-            <el-input v-model="addItemForm.mobile" placeholder="手机号"></el-input>
-          </el-form-item>
-          <el-form-item label="姓名">
-            <el-input v-model="addItemForm.realName" placeholder="姓名"></el-input>
-          </el-form-item>
-          <el-form-item label="角色" prop="roleId">
-            <el-radio v-model="addItemForm.roleId" label="1" border size="medium">超级管理员</el-radio>
-            <el-radio v-model="addItemForm.roleId" label="2" border size="medium">优赞测试</el-radio>
-          </el-form-item>
-          <el-form-item label="部门">
-            <el-cascader v-model="addItemForm.deptId" :options="options" :props="{ checkStrictly: true }"
-              clearable></el-cascader>
-          </el-form-item>
-        </el-form>
-        <div slot="footer" class="dialog-footer">
-          <el-button @click="handleCancel">取 消</el-button>
-          <el-button type="primary" @click="handleSubmit">确 定</el-button>
-        </div>
-      </el-dialog>
+      <UserDialog ref="add-dialog" :visible.sync="added" title="新增" :form="addItemForm" :handle-submit="handleAddUser"
+        @close="handleCancel($event, 'added')">
+      </UserDialog>
     </div>
     <div class="list-body">
-      <el-table :data="userList" border style="width: 100%">
+      <el-table :height="tableHeight" :data="userList" border style="width: 100%">
         <el-table-column prop="id" label="ID" width="80px">
         </el-table-column>
         <el-table-column prop="username" label="用户名">
@@ -56,120 +30,206 @@
             <el-tag v-else size="medium">正常</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="address" label="操作" width="240px">
+        <el-table-column label="操作" width="240px">
           <template slot-scope="scope">
-            <el-button size="mini">修改</el-button>
-            <el-button size="mini" type="warning">禁用</el-button>
-            <el-button size="mini" type="danger">删除</el-button>
+            <el-button size="mini" @click="handleRevise(scope.row)">修改</el-button>
+            <el-button v-if="scope.row.status" size="mini" type="success"
+              @click="handleChangeStatus(scope.row)">启用</el-button>
+            <el-button v-else size="mini" type="warning" @click="handleChangeStatus(scope.row)">禁用</el-button>
+            <el-button size="mini" type="danger" @click="handleDeleteUser(scope.row)">删除</el-button>
+            <UserDialog ref="revise-dialog" :visible.sync="revsied" title="修改" :form="reviseForm" :username-disabled="true"
+              :handle-submit="handleReviseUser" @close="handleCancel($event, 'revsied')">
+            </UserDialog>
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange" :current-page="currentPage"
-        :page-size="5" layout="total, prev, pager, next, jumper" :total="13">
+      <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange" :current-page="currentPage" :page-size="pageSize"
+        layout="total, sizes, prev, pager, next, jumper" :total="total">
       </el-pagination>
     </div>
   </div>
 </template>
 
 <script>
-import { userlist, adduser } from '@/api/index'
+import { userlist, adduser, role, deptlist, deleteuser, changestatus } from '@/api/index'
+import UserDialog from '@/components/UserDialog.vue';
 
 export default {
+  components: {
+    UserDialog
+  },
   mounted() {
     this.getUserList();
+    this.getDeptList();
+    this.getRole();
   },
   data() {
-    let validateEmail = (rule, value, callback) => {
-      if (value === '') {
-        callback(new Error('请输入邮箱地址'));
-      } else {
-        let reg = /^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/;
-        if (reg.test(value)) {
-          callback(new Error('邮箱地址格式错误,请重新输入!'));
-        }
-        callback();
-      }
-    }
-
-    let validateMobile = (rule, value, callback) => {
-      if (value === '') {
-        callback(new Error('请输入手机号码'));
-      } else {
-        let reg = /^(13[0-9]|14[5|7]|15[0|1|2|3|5|6|7|8|9]|18[0|1|2|3|5|6|7|8|9])\d{8}$/;
-        if (reg.test(value)) {
-          callback(new Error('手机号码格式错误,请重新输入!'));
-        }
-        callback();
-      }
-    }
-
     return {
       userList: [],
       input: '',
       currentPage: 1,
+      pageSize: 10,
+      total: 0,
       added: false,
       addItemForm: {
         username: '',
         email: '',
         mobile: '',
         realName: '',
-        roleId: '',
-        deptId: []
+        role: '',
+        dept: []
       },
-      addItemFromRules: {
-        username: [
-          { required: true, message: '用户名不得为空', trigger: 'blur' }
-        ],
-        email: [
-          { required: true, validator: validateEmail, trigger: 'blur' }
-        ],
-        mobile: [
-          { required: true, validator: validateMobile, trigger: 'blur' }
-        ],
-        roleId: [
-          { required: true, message: '角色不得为空', trigger: 'blur' }
-        ]
+      revsied: false,
+      reviseForm: {
+        username: '',
+        email: '',
+        mobile: '',
+        realName: '',
+        role: '',
+        dept: []
       },
-      options: [{
-        value: '优赞科技',
-        label: '优赞科技',
-        children: [{
-          value: '前端开发',
-          label: '前端开发',
-        }]
-      }]
+      roleList: [],
+      deptList: []
+    }
+  },
+  computed: {
+    tableHeight() {
+      // 640 最大
+      let height = (this.userList.length + 1) * 53;
+      return Math.min(640,height);
     }
   },
   methods: {
     getUserList() {
       this.$nextTick(async () => {
-        let result = await userlist();
-        this.userList = result.data.list;
+        let result = await userlist(this.currentPage, this.pageSize, this.input);
+        console.log(result.data);
+        let { currPage, totalCount, list } = result.data;
+        this.currentPage = currPage;
+        this.total = totalCount;
+        this.userList = list;
       });
     },
-    handleSizeChange(val) {
-      console.log(`每页 ${val} 条`);
+    async getRole() {
+      let result = await role();
+      if (result.code == 200) this.roleList = result.data;
+    },
+    async getDeptList() {
+      let result = await deptlist();
+      if (result.code == 200) {
+        let list = [];
+        this.flatten(result.data, list);
+        this.deptList = list;
+      }
     },
     handleCurrentChange(val) {
-      console.log(`当前页: ${val}`);
+      this.currentPage = val;
+      this.getUserList();
+    },
+    handleSizeChange(val) {
+      this.pageSize = val;
+      this.getUserList();
     },
     handleAddItem() {
       this.added = true;
     },
-    handleCancel() {
-      this.added = false;
+    handleCancel(closed, key) {
+      this[key] = closed;
     },
-    handleSubmit() {
-      this.$refs['addItemForm'].validate((valid) => {
+    handleAddUser() {
+      this.$refs['add-dialog'].$refs['form'].validate(async (valid) => {
         if (valid) {
+          let { username, email, mobile, realName, role, dept } = this.addItemForm;
           console.log(this.addItemForm);
-          this.handleCancel();
+          let roleId = this.roleList.filter((item) => item.roleName == role)[0].id;
+          let deptId = null;
+          if (dept.length > 0) deptId = this.deptList.filter((item) => item.name == dept.pop())[0].id;
+          let result = await adduser({ username, email, mobile, realName, roleId, deptId });
+          if (result.code == 200) {
+            this.$success('添加成功!');
+            this.addItemForm = {
+              username: '',
+              email: '',
+              mobile: '',
+              realName: '',
+              role: '',
+              dept: []
+            }
+            this.getUserList();
+          }
+          if (result.code == 500) this.$error(result.msg);
+          this.added = false;
         } else {
           console.log('error submit!!');
           return false;
         }
       });
     },
+    flatten(arr = [], list = []) {
+      arr.forEach((item) => {
+        let { id, name, sort, subDepts } = item;
+        list.push({ id, name, sort });
+        if (subDepts.length > 0) this.flatten(subDepts, list);
+        else return;
+      });
+    },
+    handleDeleteUser(row) {
+      if (row.roleName == '超级管理员') {
+        this.$error('管理员不可删除!!!');
+        return;
+      }
+      this.$confirm('此操作将永久删除该角色, 是否继续?', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(async () => {
+        let result = await deleteuser({ id: row.id });
+        console.log(result);
+        if (result.code == 200) {
+          this.$success('删除成功');
+          this.getUserList();
+        }
+      }).catch(() => {
+        this.$info('已取消');
+      });
+    },
+    handleChangeStatus(row) {
+      if (row.roleName == '超级管理员') {
+        this.$error('管理员不可修改!!!');
+        return;
+      }
+      this.$confirm('此操作将改变该角色状态, 是否继续?', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(async () => {
+        let { status, id } = row;
+        status = status ? 0 : 1;
+        let result = await changestatus({ status, id });
+        if (result.code == 200) {
+          this.$success('状态修改成功');
+          this.getUserList();
+        }
+      }).catch(() => {
+        this.$info('已取消');
+      });
+    },
+    handleSearch() {
+      this.getUserList();
+    },
+    handleRevise(row) {
+      console.log(row);
+      let { deptId, deptName, email, mobile, realName, roleName, username } = row;
+      this.reviseForm.username = username;
+      this.reviseForm.email = email;
+      this.reviseForm.mobile = mobile;
+      this.reviseForm.realName = realName;
+      this.reviseForm.role = roleName;
+      this.reviseForm.dept 
+    },
+    handleReviseUser() {
+
+    }
   }
 }
 </script>
@@ -185,7 +245,7 @@ export default {
 
   .el-dialog .el-input {
     width: 100%;
-  } 
+  }
 }
 
 .list-body {

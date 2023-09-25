@@ -39,8 +39,8 @@
         <el-table-column prop="jgmc" label="结论">
         </el-table-column>
       </el-table>
-      <el-pagination @size-change="handleSizeChange" @current-change="handleCurrentChange" :current-page="currentPage"
-        :page-size="5" layout="total, prev, pager, next, jumper" :total="13">
+      <el-pagination @current-change="handleCurrentChange" :current-page="currentPage" :page-size="pageSize"
+        layout="total, prev, pager, next, jumper" :total="total">
       </el-pagination>
     </el-card>
   </div>
@@ -79,6 +79,8 @@ export default {
       },
       tableData: [],
       currentPage: 1,
+      pageSize: 0,
+      total: 0
     }
   },
   methods: {
@@ -91,15 +93,17 @@ export default {
     },
     getServelist() {
       this.$nextTick(async () => {
-        let result = await serverlist();
-        this.tableData = result.data.list;
+        let result = await serverlist(this.currentPage);
+        let { pageSize, currentPage, totalCount, list } = result.data;
+        this.pageSize = pageSize;
+        this.currentPage = currentPage;
+        this.total = totalCount;
+        this.tableData = list;
       })
     },
-    handleSizeChange(val) {
-      console.log(`每页 ${val} 条`);
-    },
     handleCurrentChange(val) {
-      console.log(`当前页: ${val}`);
+      this.currentPage = val;
+      this.getServelist();
     },
   }
 }
